@@ -12,9 +12,12 @@ except Exception as e:
 
 
 def sanitize_text(text: str) -> str:
-    """
-    Sanitizes Personally Identifiable Information (PII) like emails,
-    phone numbers, and student IDs, avoiding over-redaction of public names.
+    """Remove supported PII using Presidio when available and regex fallbacks.
+
+    Person names are deliberately excluded from Presidio detection to avoid
+    redacting public figures. Empty input passes through unchanged; regex rules
+    still run after Presidio so domain-specific IDs and common contacts are
+    covered even when the NLP analyzer is unavailable.
     """
     if not text:
         return text

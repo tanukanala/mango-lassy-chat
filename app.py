@@ -5,6 +5,7 @@ load_dotenv()
 
 from agent_graph import app_graph, set_status_callback
 
+# Configure the page and seed chat history once per Streamlit session.
 st.set_page_config(
     page_title="MangoLassi RAG Assistant",
     page_icon="🥭",
@@ -23,6 +24,8 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
+# On each submission, add the prompt to history and translate the UI messages
+# into the role/content pairs expected by the LangGraph workflow.
 if prompt := st.chat_input("Ask a question or request a site selection report..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -38,12 +41,15 @@ if prompt := st.chat_input("Ask a question or request a site selection report...
     with st.chat_message("assistant"):
         with st.status("Initializing agentic workflow...", expanded=True) as status:
             def update_status(msg: str):
+                """Reflect graph progress in the active Streamlit status panel."""
                 status.update(label=msg)
                 st.write(f"• {msg}")
 
             set_status_callback(update_status)
 
             try:
+                # Invoke the graph once with conversation history; its final
+                # message becomes the assistant response shown and saved below.
                 result = app_graph.invoke({"messages": graph_messages})
                 ai_response = result["messages"][-1].content
                 

@@ -8,6 +8,8 @@ from logger import log_status
 llm = ChatOllama(model="llama3.2", temperature=0.1, base_url="http://localhost:11434")
 
 class SiteSelectionState(TypedDict):
+    """Data passed through research, evaluation, and report-writing stages."""
+
     country: str
     locations: List[str]
     raw_data: Dict[str, Any]
@@ -16,6 +18,11 @@ class SiteSelectionState(TypedDict):
     report_filepath: str
 
 def supervisor_agent_node(state: SiteSelectionState):
+    """Gather zoning, power, and tax-incentive search results for each site.
+
+    Each location receives three focused Serper searches; the raw results are
+    grouped by location and returned for the evaluator stage.
+    """
     country = state["country"]
     locations = state["locations"]
     
@@ -39,6 +46,11 @@ def supervisor_agent_node(state: SiteSelectionState):
     return {"raw_data": raw_data}
 
 def evaluation_subgraph_node(state: SiteSelectionState):
+    """Ask the local model to score each site's gathered evidence.
+
+    The node formats each site's search results into an assessment prompt and
+    stores the model's pros, cons, and metric scores by location.
+    """
     raw_data = state["raw_data"]
     evaluations = {}
     
@@ -70,6 +82,11 @@ def evaluation_subgraph_node(state: SiteSelectionState):
     return {"evaluations": evaluations}
 
 def synthesis_and_report_node(state: SiteSelectionState):
+    """Compare the per-site evaluations and persist the final investment report.
+
+    The model synthesizes all evaluations into a single report, which is saved
+    under a filename derived from sanitized country and location names.
+    """
     country = state["country"]
     locations = state["locations"]
     evaluations = state["evaluations"]
@@ -111,6 +128,8 @@ def synthesis_and_report_node(state: SiteSelectionState):
         "report_filepath": filepath
     }
 
+# Site selection always follows the same sequence: gather evidence, evaluate
+# each candidate, then synthesize and save the comparison report.
 site_workflow = StateGraph(SiteSelectionState)
 site_workflow.add_node("supervisor", supervisor_agent_node)
 site_workflow.add_node("evaluator", evaluation_subgraph_node)

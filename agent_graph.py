@@ -28,6 +28,12 @@ serper_search = GoogleSerperAPIWrapper()
 
 @st.cache_resource
 def load_embeddings_and_vector_store():
+    """Create the embedding model and prepare the persistent document index.
+
+    Supported text files are read from the documents folder, sanitized for PII,
+    split into overlapping chunks, and added to Chroma for later retrieval.
+    Streamlit caches the resulting vector store so it is not rebuilt per rerun.
+    """
     log_status(f"Initializing Ollama Embeddings model: {EMBEDDING_MODEL}")
     emb_func = OllamaEmbeddings(model=EMBEDDING_MODEL, base_url=OLLAMA_BASE_URL)
     
@@ -70,9 +76,16 @@ retriever = vector_store.as_retriever(search_kwargs={"k": 6})
 llm = ChatOllama(model=LLM_MODEL, temperature=0.0, mirostat=0, base_url=OLLAMA_BASE_URL)
 
 class State(TypedDict):
+    """Conversation state passed between nodes in the assistant graph."""
+
     messages: Annotated[list, add_messages]
 
 def route_intent(query: str) -> str:
+    """Choose a processing path by checking the query against keyword groups.
+
+    Site-selection phrases take precedence, followed by live-web terms and
+    project/document terms; anything unmatched uses general LLM reasoning.
+    """
     query_lower = query.lower()
     if "site selection" in query_lower or "data center" in query_lower or "commercial real estate" in query_lower:
         return "SITE_SELECTION"
@@ -85,6 +98,11 @@ def route_intent(query: str) -> str:
     return "LLM"
 
 def extract_site_parameters(query: str) -> tuple:
+    """Extract the requested country and locations for a site-selection run.
+
+    The local LLM is asked for JSON first. If it fails or returns no usable
+    object, country keywords select a small predefined set of candidate sites.
+    """
     log_status("Analyzing user query for site selection parameters...")
     extraction_prompt = f"""
     You are a precise data extraction assistant for commercial real estate and data center site selection.
@@ -129,6 +147,12 @@ def extract_site_parameters(query: str) -> tuple:
     return fallback
 
 def adaptive_router_node(state: State):
+    """Route the latest user message and produce a mode-specific response.
+
+    Site-selection requests run their dedicated research graph immediately.
+    Other intents build a system prompt (with retrieved or searched context
+    when applicable), call the chat model, and label the response with its mode.
+    """
     latest_query = ""
     for msg in reversed(state["messages"]):
         msg_type = getattr(msg, "type", "")
@@ -168,10 +192,13 @@ def adaptive_router_node(state: State):
         log_status("Intent matched: [RAG] (Retrieving local context)")
         retrieved_docs = retriever.invoke(latest_query)
         context_text = "\n\n".join([doc.page_content for doc in retrieved_docs])
+
+        # Clean system prompt without dumping header tags into user output
         system_prompt = (
-            "You are an expert AI assistant. Answer the user's question accurately "
-            "using ONLY the provided local context below. If the answer cannot be found "
-            "in the context, state clearly that you don't know based on local documents.\n\n"
+            "You are a helpful, professional AI assistant. "
+            "Answer the user's question accurately, naturally, and concisely using ONLY "
+            "the provided local context below. Do NOT output raw system headers, chunk tags, "
+            "or '<eof>' tokens in your response.\n\n"
             f"--- LOCAL CONTEXT ---\n{context_text}\n----------------"
         )
         badge = "[RAG]"
@@ -207,6 +234,7 @@ def adaptive_router_node(state: State):
     return {"messages": [response]}
 
 def output_guardrail_node(state: State):
+    """Sanitize the latest assistant response while preserving its mode badge."""
     log_status("Checking output response against PII guardrails...")
     last_msg = state["messages"][-1]
     if hasattr(last_msg, "content"):
@@ -221,6 +249,8 @@ def output_guardrail_node(state: State):
         last_msg.content = f"{badge} {sanitized_content}".strip()
     return {"messages": state["messages"]}
 
+# The main conversation graph routes each request first, then sanitizes the
+# generated response before returning it to the Streamlit interface.
 workflow = StateGraph(State)
 workflow.add_node("router_agent", adaptive_router_node)
 workflow.add_node("guardrail", output_guardrail_node)

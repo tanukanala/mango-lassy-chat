@@ -1,4 +1,29 @@
-# 🥭 Mango Lassi: Privacy-Preserving Agentic AI Chat Assistant
+# 🥭 Mango Lassi: Agentic RAG Chat Assistant
+
+**Developed by:** Tanishka Sree Kanala (Tanu)  
+**Grade:** 10th Grade, Coppell High School, Dallas, Texas  
+**Project Category:** Artificial Intelligence & Software Engineering  
+
+---
+
+## 📌 Project Overview
+Mango Lassi is a high-performance, privacy-conscious AI assistant built using modern agentic software architecture. The assistant provides intelligent retrieval-augmented generation (RAG) over local documents, live web search capabilities, and a multi-agent system designed for commercial real estate and infrastructure site selection.
+
+---
+
+## 🚀 Technical Highlights
+* **Agentic Graph Workflow (`LangGraph`)**: Implements an adaptive intent router that dynamically directs user queries across four modes: Local Document Retrieval (`[RAG]`), Live Web Search (`[WEB]`), Multi-Agent Site Analysis (`[SITE_SELECTION]`), and General Reasoning (`[LLM]`).
+* **Multi-Agent Infrastructure Engine**: Features a supervisor node that delegates research to specialized sub-agents to evaluate zoning, power grid reliability, and tax incentives across global candidate sites.
+* **Dual-Layer Guardrails & Privacy**: Applies automated PII (Personally Identifiable Information) sanitization during document ingestion and response generation to protect sensitive user data.
+* **In-Chat Telemetry & Streaming UI**: Built with Streamlit, providing real-time execution tracing and workflow status updates (`st.status`) directly within the chat window.
+
+---
+
+## 🛠️ Technology Stack
+* **Language & Frameworks**: Python, Streamlit, LangGraph, LangChain
+* **AI Models**: Local Ollama (`llama3.2`, `embeddinggemma`)
+* **Vector Store**: ChromaDB
+* **APIs**: Serper.dev Google Search API Wrapper
 
 ## 1. Executive Summary & Project Overview
 
