@@ -109,7 +109,7 @@ def synthesis_and_report_node(state: SiteSelectionState):
     
     report_content = llm.invoke(synthesis_prompt).content
     
-    reports_dir = r"E:\Products\mango-lassy-chat\reports"
+    reports_dir = r".\reports"
     os.makedirs(reports_dir, exist_ok=True)
     
     # Sanitize country and location names to prevent path/directory traversal issues (e.g. slashes)

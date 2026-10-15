@@ -210,7 +210,19 @@ NOTE: Make sure your `.env` file contains your `SERPER_API_KEY`.
 3. URL to open from browser:
 http://localhost:8501/
 
-### Sample Screens
+## Sample Screens
+
+![alt text](image-1.png)
+
+![alt text](image.png)
+
+![alt text](image-2.png)
+
+![alt text](image-3.png)
+
+![alt text](image-4.png)
+
+![alt text](image-5.png)
 
 ## Prerequisites
 
@@ -385,16 +397,50 @@ ollama pull embeddinggemma
 
 ```
 
-## Sample Screens
+### Intelligent LLM Intent Classifier
 
-![alt text](image-1.png)
+def route_intent(query: str) -> str:
+    """
+    Uses LLM-based intent classification for flexible natural language understanding,
+    with fast keyword heuristics as a fallback.
+    """
+    classification_prompt = f"""
+    Analyze the user query below and classify its primary intent into EXACTLY ONE of the following categories:
+    
+    1. SITE_SELECTION: Queries asking about commercial real estate, buying/leasing property, shopping centers/malls, data centers, site feasibility, or evaluating cities/countries for real estate development/investment.
+    2. WEB: Queries asking for real-time information, recent news, current prices, weather, stocks, or search online.
+    3. RAG: Queries asking about local project documentation, system architecture, "Mango Lassi", "Tanishka", or roadmap details.
+    4. LLM: General conversational queries, coding questions, math, or basic Q&A.
 
-![alt text](image.png)
+    User Query: "{query}"
 
-![alt text](image-2.png)
+    Return ONLY the category name (SITE_SELECTION, WEB, RAG, or LLM). No explanations or extra punctuation.
+    """
+    try:
+        response = llm.invoke(classification_prompt)
+        intent = response.content.strip().upper()
+        for valid_intent in ["SITE_SELECTION", "WEB", "RAG", "LLM"]:
+            if valid_intent in intent:
+                return valid_intent
+    except Exception as e:
+        log_status(f"[ROUTER WARNING] LLM intent classification failed ({e}). Using keyword fallback.")
 
-![alt text](image-3.png)
-
-![alt text](image-4.png)
-
-![alt text](image-5.png)
+    # Fallback heuristic rules
+    query_lower = query.lower()
+    site_keywords = [
+        "site selection", "data center", "commercial real estate", "investment location",
+        "shopping complex", "shopping center", "shopping mall", "property investment",
+        "real estate", "retail space", "warehouse", "buying property", "commercial property"
+    ]
+    if any(k in query_lower for k in site_keywords):
+        return "SITE_SELECTION"
+        
+    web_keywords = ["latest", "news", "current", "weather", "today", "search", "price", "stock", "who is", "google", "online"]
+    if any(k in query_lower for k in web_keywords):
+        return "WEB"
+        
+    local_keywords = ["mango", "lassy", "lassi", "roadmap", "architecture", "tanishka"]
+    if any(k in query_lower for k in local_keywords):
+        return "RAG"
+        
+    return "LLM"

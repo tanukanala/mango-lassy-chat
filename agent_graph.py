@@ -87,7 +87,16 @@ def route_intent(query: str) -> str:
     project/document terms; anything unmatched uses general LLM reasoning.
     """
     query_lower = query.lower()
-    if "site selection" in query_lower or "data center" in query_lower or "commercial real estate" in query_lower:
+    # Expanded Commercial Real Estate / Site Selection vocabulary
+    site_keywords = [
+        "site selection", "data center", "commercial real estate", "investment location",
+        "shopping complex", "shopping mall", "shopping center", "retail space",
+        "commercial property", "real estate investment", "industrial park", "warehouse site",
+        "real estate business", "real estate market", "property development", "buying property",
+        "real estate in", "property in", "invest in real estate", "starting real estate",
+        "real estate venture", "property business"
+    ]
+    if any(keyword in query_lower for keyword in site_keywords):
         return "SITE_SELECTION"
     web_keywords = ["latest", "news", "current", "weather", "today", "search", "price", "stock", "who is", "what is happening", "google", "online", "recent", "days", "week", "month"]
     if any(keyword in query_lower for keyword in web_keywords):
