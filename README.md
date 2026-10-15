@@ -1,6 +1,152 @@
-# Mango Lassi Chat Assistant (Python & Streamlit)
+# 🥭 Mango Lassi: Privacy-Preserving Agentic AI Chat Assistant
 
-A high-performance, privacy-conscious, agentic AI chat assistant powered by local Ollama models (`llama3.2`, `embeddinggemma`), ChromaDB vector store, Serper.dev live web search, and dual-layer PII guardrails built with Python and Streamlit.
+## 1. Executive Summary & Project Overview
+
+**Mango Lassi** is an enterprise-grade, privacy-conscious multi-agent AI assistant designed for **Commercial Real Estate (CRE) & Data Center Site Selection**, document-based Retrieval-Augmented Generation (RAG), real-time web search integration, and general AI reasoning.
+
+Built on top of **LangGraph**, **Streamlit**, and local Large Language Models (LLMs) via **Ollama**, Mango Lassi features dual-layer Personally Identifiable Information (PII) guardrails, hierarchical multi-agent graph workflows, and real-time live execution telemetry streamed directly to the user interface.
+
+---
+
+## 2. Key Features
+
+### 🏢 Hierarchical Multi-Agent Site Selection Engine
+
+* **Supervisor-Worker Architecture**: Uses a Lead Investment Director supervisor node that orchestrates parallel research tasks across dedicated sub-agents.
+* **Triple-Domain Analysis**: Automatically researches and evaluates candidate sites across three critical vectors:
+1. **Zoning & Environmental Regulations**
+2. **Power Grid Capacity & Renewable Infrastructure**
+3. **Tax Incentives & Financial Abatements**
+
+
+* **Automated Comparative Reporting**: Synthesizes quantitative scoring (out of 10) and qualitative pros/cons into structured Markdown Investment Memos automatically exported to disk.
+
+### 🎯 Adaptive Ternary Intent Router
+
+* Intelligently inspects incoming user queries and routes them to the optimal execution path:
+* **`[SITE_SELECTION]`**: Triggers the multi-agent graph for site analysis and report generation.
+* **`[RAG]`**: Queries local vector database for workspace and technical project documentation.
+* **`[WEB]`**: Executes live internet searches via Serper.dev for current news, market prices, and dynamic data.
+* **`[LLM]`**: Falls back to local general-purpose LLM reasoning.
+
+
+
+### 🛡️ Dual-Layer PII Protection (Guardrails)
+
+* **Ingestion Guardrail**: Automatically sanitizes sensitive data (emails, phone numbers, SSNs, names) from local `.txt` and `.md` files prior to chunking and embedding in the vector store.
+* **Output Guardrail**: Validates and redacts final AI responses before rendering them in the user interface.
+
+### 📡 Live In-Chat Telemetry & Execution Tracing
+
+* Streams real-time sub-agent execution logs (parameter parsing, worker delegation, scoring, and report saving) directly inside an expandable Streamlit `st.status()` container within the chat bubble.
+
+---
+
+## 3. System Architecture & Tech Stack
+
+### Technology Stack
+
+| Layer | Technology / Library | Purpose |
+| --- | --- | --- |
+| **User Interface** | Streamlit | Lightweight web interface with `st.status` live telemetry container |
+| **Agentic Framework** | LangGraph & LangChain | Graph-based state orchestration and multi-agent coordination |
+| **Local LLM & Embeddings** | Ollama (`llama3.2`, `embeddinggemma`) | On-device, privacy-preserving LLM inference and vector embedding generation |
+| **Vector Database** | ChromaDB | Local persistent vector database for document chunk retrieval |
+| **Search Engine** | Google Serper.dev API Wrapper | Live web search capabilities for real-time site data and news |
+| **Security & Privacy** | Custom Presidio / Regex Sanitizer | PII redaction during ingestion and response generation |
+
+---
+
+## 4. Architecture Diagram
+
+```text
+                               ┌───────────────────────────┐
+                               │   Streamlit UI (`app.py`) │
+                               │  - Chat Input / History   │
+                               │  - Live st.status() Feed  │
+                               └─────────────┬─────────────┘
+                                             │ Invokes app_graph.invoke()
+                                             ▼
+                               ┌───────────────────────────┐
+                               │ Main LangGraph StateGraph │
+                               │   (State: messages)       │
+                               └─────────────┬─────────────┘
+                                             │ START
+                                             ▼
+                               ┌───────────────────────────┐
+                               │    `router_agent` Node    │
+                               │  (Adaptive Intent Router) │
+                               └─────────────┬─────────────┘
+                                             │
+      ┌──────────────────┬───────────────────┼───────────────────┐
+      │                  │                   │                   │
+      ▼ [SITE_SELECTION] ▼ [RAG]             ▼ [WEB]             ▼ [LLM]
+┌──────────────────┐┌────────────────┐┌────────────────┐┌──────────────────┐
+│ site_selector.py ││ ChromaDB +     ││ Google Serper  ││ Direct Ollama    │
+│ StateGraph:      ││ EmbeddingGemma ││ API Wrapper    ││ LLM Inference    │
+│                  ││ Vector Store   ││ (Live Search)  │└──────────────────┘
+│ 1. supervisor    ││ (Guarded Chunks│└────────────────┘          
+│    (Serper API)  ││  via Guardrails│                            
+│ 2. evaluator     ││  Module)       │                            
+│    (LLM Scoring) │└────────────────┘                            
+│ 3. synthesizer   │                                              
+│    (Markdown Memo│                                              
+│     Export)      │                                              
+└─────────┬────────┘                                              
+          │                                                       
+          └──────────────────────────┬────────────────────────────┘
+                                     │
+                                     ▼
+                       ┌───────────────────────────┐
+                       │     `guardrail` Node      │
+                       │   (Output PII Sanitizer   │
+                       │    via `guardrails.py`)   │
+                       └─────────────┬─────────────┘
+                                     │ END
+                                     ▼
+                       ┌───────────────────────────┐
+                       │ Return AIMessage to UI &  │
+                       │ Real-time Telemetry Feed  │
+                       │   via `logger.py`         │
+                       └───────────────────────────┘
+
+```
+
+---
+
+## 5. Implementation Details & Module Breakdown
+
+The application is architected into decoupled modules for high maintainability, non-circular execution, and clear separation of concerns:
+
+### 1. `app.py` (Presentation & UI Layer)
+
+* Manages Streamlit page configuration, chat history session state (`st.session_state`), and input handling.
+* Instantiates an `st.status()` context container that listens to status updates during graph execution and renders progress live to the user.
+
+### 2. `agent_graph.py` (Core Router & Main Graph Orchestration)
+
+* Defines the primary `StateGraph` containing `router_agent` and `guardrail` nodes.
+* Initializes and caches the local **ChromaDB** vector store with **EmbeddingGemma**.
+* Implements dynamic parameter extraction (`extract_site_parameters`) using `llama3.2` and regex parsing to extract countries and specific target locations from natural language prompts.
+
+### 3. `site_selector.py` (Sub-Graph Multi-Agent Workflow)
+
+* Implements a 3-node sub-graph (`supervisor` $\rightarrow$ `evaluator` $\rightarrow$ `synthesizer`):
+1. **Supervisor**: Dispatches parallel search tasks to Serper.dev for each candidate market.
+2. **Evaluator**: Prompt-engineers LLM domain experts to score Power, Zoning, and Financials.
+3. **Synthesizer**: Constructs the final investment memo, sanitizes filename paths, and exports Markdown reports to `reports/`.
+
+### 4. `guardrails.py` (Privacy & Security Layer)
+
+* Contains the `sanitize_text()` function utilizing Microsoft Presidio / Regex patterns to strip PII before embedding storage and before final UI rendering.
+
+### 5. `logger.py` (Execution Telemetry)
+
+* Acts as a neutral callback bridge between the backend LangGraph workflows and Streamlit UI components, completely avoiding Python circular import issues.
+
+---
+
+How does this project documentation draft look for Tanishka's presentation? Let me know if you would like to expand on any specific section or add performance benchmarking details!
 
 ---
 
@@ -24,8 +170,6 @@ success
 
 > > > Hi
 > > 
-> > 
-> 
 > 
 
 How can I assist you today?
@@ -45,7 +189,7 @@ http://localhost:8501/
 
 ## Prerequisites
 
-1. **Python 3.10+** installed on your machine.
+1. **Python 3.10+** installed on your machine (python-3.12.10).
 2. **Ollama** installed and running locally with `llama3.2` and `embeddinggemma` pulled.
 
 ---
@@ -90,9 +234,9 @@ Type git --version to make sure it works, then run git init inside E:\Products\m
 Create a file named .gitignore in the root folder (E:\Products\mango-lassy-chat.gitignore) and paste this inside:
 
 chroma_db/
+venv/
 .env
-**pycache**/
-.DS_Store
+__pycache__/
 
 3. git add .
 4. git config --global user.email "tanu.kanala@gmail.com"
@@ -109,6 +253,7 @@ Create your root folder and subdirectories:
 mkdir mango-lassy-chat
 cd mango-lassy-chat
 mkdir documents
+mkdir reports
 
 ```
 
@@ -116,10 +261,15 @@ mkdir documents
 
 ## Step 2: Install Python Dependencies
 
-Navigate to your project root and install the required packages:
+Setup environment for python. Navigate to your project root and install the required packages:
+
+1. python -m venv venv
+2. Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
+3. .\venv\Scripts\activate
+
 
 ```bash
-pip install streamlit langgraph langchain-ollama langchain-chroma langchain-core langchain-text-splitters langchain-community python-dotenv google-search-results presidio-analyzer presidio-anonymizer
+pip install -r requirements.txt
 python -m spacy download en_core_web_sm
 
 ```
@@ -128,24 +278,68 @@ python -m spacy download en_core_web_sm
 
 ## LangGraph Architecture Diagram
 
-```mermaid
-graph TD
-    classDef startEnd fill:#f9f,stroke:#333,stroke-width:2px;
-    classDef node fill:#bbf,stroke:#333,stroke-width:2px;
-    classDef db fill:#fbb,stroke:#333,stroke-width:2px;
+Here is the accurate, up-to-date architecture diagram reflecting the exact module breakdown, data flows, and routing logic implemented in your code (app.py, agent_graph.py, site_selector.py, guardrails.py, and logger.py):
 
-    START([START]) --> Router[<b>router_agent Node</b><br>• Ternary Intent Router: <code>[RAG]</code> | <code>[WEB]</code> | <code>[LLM]</code><br>• Injects Context / Search Results<br>• Invokes local LLM (llama3.2)]:::node
-    
-    Chroma[(ChromaDB<br>Vector Store)] -.->|Retrieved Chunks<br><code>[RAG]</code>| Router
-    Serper[(Serper.dev<br>Web API)] -.->|Live Search Results<br><code>[WEB]</code>| Router
 
-    Router --> Guardrail[<b>guardrail Node</b><br>• Extracts Response Badge<br>• Runs <code>sanitize_text()</code><br>• Strips PII / Preserves IDs]:::node
+                               ┌───────────────────────────┐
+                               │   Streamlit UI (`app.py`) │
+                               │  - Chat Input / History   │
+                               │  - Live st.status() Feed  │
+                               └─────────────┬─────────────┘
+                                             │ Invokes app_graph.invoke()
+                                             ▼
+                               ┌───────────────────────────┐
+                               │ Main LangGraph StateGraph │
+                               │   (State: messages)       │
+                               └─────────────┬─────────────┘
+                                             │ START
+                                             ▼
+                               ┌───────────────────────────┐
+                               │    `router_agent` Node    │
+                               │  (Adaptive Intent Router) │
+                               └─────────────┬─────────────┘
+                                             │
+      ┌──────────────────┬───────────────────┼───────────────────┐
+      │                  │                   │                   │
+      ▼ [SITE_SELECTION] ▼ [RAG]             ▼ [WEB]             ▼ [LLM]
+┌──────────────────┐┌────────────────┐┌────────────────┐┌──────────────────┐
+│ site_selector.py ││ ChromaDB +     ││ Google Serper  ││ Direct Ollama    │
+│ StateGraph:      ││ EmbeddingGemma ││ API Wrapper    ││ LLM Inference    │
+│                  ││ Vector Store   ││ (Live Search)  │└──────────────────┘
+│ 1. supervisor    ││ (Guarded Chunks│└────────────────┘          
+│    (Serper API)  ││  via Guardrails│                            
+│ 2. evaluator     ││  Module)       │                            
+│    (LLM Scoring) │└────────────────┘                            
+│ 3. synthesizer   │                                              
+│    (Markdown Memo│                                              
+│     Export)      │                                              
+└─────────┬────────┘                                              
+          │                                                       
+          └──────────────────────────┬────────────────────────────┘
+                                     │
+                                     ▼
+                       ┌───────────────────────────┐
+                       │     `guardrail` Node      │
+                       │   (Output PII Sanitizer   │
+                       │    via `guardrails.py`)   │
+                       └─────────────┬─────────────┘
+                                     │ END
+                                     ▼
+                       ┌───────────────────────────┐
+                       │ Return AIMessage to UI &  │
+                       │ Real-time Telemetry Feed  │
+                       │   via `logger.py`         │
+                       └───────────────────────────┘
+Key Components mapped to your code:
+app.py: Handles the Streamlit session state, user chat inputs, and the live st.status() container updated via callback hooks.
 
-    Guardrail --> END([END])
-    
-    class START,END startEnd;
+agent_graph.py: Houses the core state graph, intent routing (route_intent), dynamic parameter extraction, ChromaDB document ingestion (with guardrail checks), and the final guardrail output sanitization node.
 
-```
+site_selector.py: A specialized sub-graph handling hierarchical multi-agent orchestration (supervisor, evaluator, and synthesizer nodes) for Commercial Real Estate and Data Center site analysis and .md file generation.
+
+guardrails.py: Provides text sanitization to protect against PII during file ingestion and final response generation.
+
+logger.py: Acts as a neutral utility to route live execution telemetry directly into the UI without circular imports.
 
 ---
 
