@@ -7,3 +7,7 @@ chromadb>=0.5.0
 tavily-python>=0.5.0
 langchain-chroma>=0.1.0
 langchain-text-splitters>=0.1.0
+presidio-analyzer 
+presidio-anonymizer
+google-search-results
+python-dotenv

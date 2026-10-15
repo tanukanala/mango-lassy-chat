@@ -83,4 +83,8 @@ Phase 4: Document Upload UI & Multi-Format Support (Future)
 - Automatic background parsing, chunking, and embedding of uploaded files into the active Chroma collection.
 - Persistent session history management using SQLite checkpoints for LangGraph.
 
+### 6. ABOUT AUTHOR / DEVELOPER
+--------------------------------------------------------------------------------
+Tanishka Sree Kanala namely Tanu developed this mango lassi chat assistant as part of school project, she is studying 10th grade in Coppell High School, Dallas, Texas. Her school ID number is 77277. She is pro in programming and development, her hobbies includes badminton, swimming, skating, books reading and painting. She is amazing in academics.
+
 <eof>
