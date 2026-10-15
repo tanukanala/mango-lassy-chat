@@ -1,10 +1,9 @@
 import streamlit as st
 from dotenv import load_dotenv
 
-# --- 0. Load Environment Variables First ---
 load_dotenv()
 
-from agent_graph import app_graph
+from agent_graph import app_graph, set_status_callback
 
 st.set_page_config(
     page_title="MangoLassi RAG Assistant",
@@ -37,15 +36,21 @@ if prompt := st.chat_input("Ask a question or request a site selection report...
             graph_messages.append(("assistant", msg["content"]))
 
     with st.chat_message("assistant"):
-        with st.spinner("Processing request through Multi-Agent Workflow..."):
+        with st.status("Initializing agentic workflow...", expanded=True) as status:
+            def update_status(msg: str):
+                status.update(label=msg)
+                st.write(f"• {msg}")
+
+            set_status_callback(update_status)
+
             try:
                 result = app_graph.invoke({"messages": graph_messages})
                 ai_response = result["messages"][-1].content
                 
-                st.markdown(ai_response)
-                st.session_state.messages.append({"role": "assistant", "content": ai_response})
+                status.update(label="Workflow completed successfully!", state="complete", expanded=False)
             except Exception as e:
-                error_msg = f"Error processing request: {str(e)}"
-                print(f"[ERROR] {error_msg}")
-                st.error(error_msg)
-                st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                ai_response = f"Error processing request: {str(e)}"
+                status.update(label="Workflow failed!", state="error", expanded=True)
+
+        st.markdown(ai_response)
+        st.session_state.messages.append({"role": "assistant", "content": ai_response})

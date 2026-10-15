@@ -13,10 +13,9 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.utilities import GoogleSerperAPIWrapper
 from langchain_core.messages import AIMessage
 
-# Suppress harmless LangChain community deprecation warnings in console output
 warnings.filterwarnings("ignore", category=DeprecationWarning)
-
 from guardrails import sanitize_text
+from logger import log_status, set_status_callback
 from site_selector import site_selection_graph
 
 OLLAMA_BASE_URL = "http://localhost:11434"
@@ -29,7 +28,7 @@ serper_search = GoogleSerperAPIWrapper()
 
 @st.cache_resource
 def load_embeddings_and_vector_store():
-    print("[INIT] Initializing Ollama Embeddings model:", EMBEDDING_MODEL)
+    log_status(f"Initializing Ollama Embeddings model: {EMBEDDING_MODEL}")
     emb_func = OllamaEmbeddings(model=EMBEDDING_MODEL, base_url=OLLAMA_BASE_URL)
     
     vector_store = Chroma(
@@ -38,7 +37,7 @@ def load_embeddings_and_vector_store():
         persist_directory=PERSIST_DIRECTORY
     )
     
-    print(f"[INGESTION] Checking documents directory: {DOCS_DIRECTORY}")
+    log_status(f"Checking documents directory: {DOCS_DIRECTORY}")
     if os.path.exists(DOCS_DIRECTORY):
         all_docs = []
         files_found = os.listdir(DOCS_DIRECTORY)
@@ -52,7 +51,7 @@ def load_embeddings_and_vector_store():
                         doc_id = f"{filename}_{os.path.getmtime(file_path)}"
                         all_docs.append(Document(page_content=sanitized_content, metadata={"source": filename, "id": doc_id}))
                 except Exception as e:
-                    print(f"[ERROR] Error reading file {filename}: {e}")
+                    log_status(f"Error reading file {filename}: {e}")
         
         if all_docs:
             text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
@@ -61,7 +60,7 @@ def load_embeddings_and_vector_store():
             metadatas = [d.metadata for d in split_docs]
             ids = [f"{d.metadata['source']}_{i}" for i, d in enumerate(split_docs)]
             vector_store.add_texts(texts=texts, metadatas=metadatas, ids=ids)
-            print("[EMBEDDING] Successfully upserted all guarded chunks into vector store!")
+            log_status("Successfully upserted guarded chunks into vector store.")
             
     return vector_store
 
@@ -75,33 +74,25 @@ class State(TypedDict):
 
 def route_intent(query: str) -> str:
     query_lower = query.lower()
-    
     if "site selection" in query_lower or "data center" in query_lower or "commercial real estate" in query_lower:
         return "SITE_SELECTION"
-        
     web_keywords = ["latest", "news", "current", "weather", "today", "search", "price", "stock", "who is", "what is happening", "google", "online", "recent", "days", "week", "month"]
     if any(keyword in query_lower for keyword in web_keywords):
         return "WEB"
-        
     local_keywords = ["mango", "lassy", "lassi", "roadmap", "feature", "architecture", "assistant", "chat", "project", "doc", "document", "author", "phase", "stack", "implementation", "tanishka"]
     if any(keyword in query_lower for keyword in local_keywords):
         return "RAG"
-        
     return "LLM"
 
 def extract_site_parameters(query: str) -> tuple:
-    """
-    Robust parameter extractor with granular debug prints to trace execution speed and points of failure.
-    """
-    print(f"\n[DEBUG EXTRACT] Entering extract_site_parameters() for query: '{query}'")
-    
+    log_status("Analyzing user query for site selection parameters...")
     extraction_prompt = f"""
     You are a precise data extraction assistant for commercial real estate and data center site selection.
     Analyze the user query below and extract:
     1. "country": The target country (default to "United States" if unspecified).
     2. "locations": A list of specific locations (cities, states, or regions).
-       - RULE A: If the user explicitly mentions specific locations (e.g. "Dallas", "London", "Ashburn"), extract those exact locations.
-       - RULE B: If the user asks a general question for a country without naming specific locations (e.g. "which united state and location is best...", "best place for data center in US"), output the top 3 premier commercial real estate / data center locations for that country (e.g. for United States: ["Northern Virginia", "Phoenix AZ", "Columbus OH"]).
+       - RULE A: If the user explicitly mentions specific locations (e.g. "Dallas", "London", "San Jose"), extract those exact locations.
+       - RULE B: If the user asks a general question for a country without naming specific locations, output the top 3 premier commercial real estate / data center locations for that country (e.g. for United States: ["Northern Virginia", "Phoenix AZ", "Columbus OH"]).
     
     Return ONLY a valid JSON object with keys "country" (string) and "locations" (list of strings). No extra text or markdown formatting.
     
@@ -109,31 +100,22 @@ def extract_site_parameters(query: str) -> tuple:
     
     JSON Output:
     """
-    
-    print(f"[DEBUG EXTRACT] Sending prompt to local LLM ({LLM_MODEL})... (waiting for response)")
+    log_status("Querying local LLM for parameter extraction...")
     try:
         response = llm.invoke(extraction_prompt)
         content = response.content.strip()
-        print(f"[DEBUG EXTRACT] Received response from LLM successfully. Raw content:\n{content}\n")
-        
         json_match = re.search(r'\{.*\}', content, re.DOTALL)
         if json_match:
-            json_str = json_match.group(0)
-            print(f"[DEBUG EXTRACT] Extracted JSON string via regex: {json_str}")
-            data = json.loads(json_str)
+            data = json.loads(json_match.group(0))
             country = data.get("country", "United States")
             locations = data.get("locations", ["Northern Virginia", "Phoenix AZ", "Columbus OH"])
             if not locations:
                 locations = ["Northern Virginia", "Phoenix AZ", "Columbus OH"]
-            print(f"[DEBUG EXTRACT] Successfully parsed JSON -> Country: {country}, Locations: {locations}")
+            log_status(f"Target Country: {country} | Locations: {', '.join(locations)}")
             return country, locations
-        else:
-            print("[DEBUG EXTRACT WARNING] No JSON bracket found in LLM response text.")
     except Exception as e:
-        print(f"[DEBUG EXTRACT ERROR] Exception encountered during LLM invocation or JSON parsing: {e}")
+        log_status(f"Extraction warning: {e}. Using fallback.")
 
-    # Deterministic Fallback Rules
-    print("[DEBUG EXTRACT] Falling back to deterministic rules...")
     query_lower = query.lower()
     if "uk" in query_lower or "united kingdom" in query_lower or "london" in query_lower:
         fallback = ("United Kingdom", ["London", "Slough", "Dublin"])
@@ -143,8 +125,7 @@ def extract_site_parameters(query: str) -> tuple:
         fallback = ("Japan", ["Tokyo", "Osaka", "Nagoya"])
     else:
         fallback = ("United States", ["Northern Virginia", "Phoenix AZ", "Columbus OH"])
-        
-    print(f"[DEBUG EXTRACT] Fallback result -> Country: {fallback[0]}, Locations: {fallback[1]}")
+    log_status(f"Target Country: {fallback[0]} | Locations: {', '.join(fallback[1])}")
     return fallback
 
 def adaptive_router_node(state: State):
@@ -161,10 +142,8 @@ def adaptive_router_node(state: State):
     intent = route_intent(latest_query)
     
     if intent == "SITE_SELECTION":
-        print(f"\n[ROUTER] Intent matched: [SITE_SELECTION] | Query: '{latest_query}'")
-        
+        log_status("Intent matched: [SITE_SELECTION]")
         country, locations = extract_site_parameters(latest_query)
-        print(f"[EXTRACTED PARAMS] Country: {country} | Locations: {locations}")
         
         result = site_selection_graph.invoke({
             "country": country,
@@ -183,11 +162,10 @@ def adaptive_router_node(state: State):
             f"#### Summary & Comparison:\n{result['comparison_report']}\n\n"
             f"---\n*📁 **Report Saved Successfully** to: `{result['report_filepath']}`*"
         )
-        
         return {"messages": [AIMessage(content=f"{badge} {response_text}")]}
 
     elif intent == "RAG":
-        print(f"\n[ROUTER] Intent matched: [RAG] | Query: '{latest_query}'")
+        log_status("Intent matched: [RAG] (Retrieving local context)")
         retrieved_docs = retriever.invoke(latest_query)
         context_text = "\n\n".join([doc.page_content for doc in retrieved_docs])
         system_prompt = (
@@ -199,7 +177,7 @@ def adaptive_router_node(state: State):
         badge = "[RAG]"
 
     elif intent == "WEB":
-        print(f"\n[ROUTER] Intent matched: [WEB] (Serper.dev) | Query: '{latest_query}'")
+        log_status("Intent matched: [WEB] (Running Serper.dev search)")
         try:
             web_results = serper_search.run(latest_query)
         except Exception as e:
@@ -213,7 +191,7 @@ def adaptive_router_node(state: State):
         badge = "[WEB]"
 
     else:
-        print(f"\n[ROUTER] Intent matched: [LLM] | Query: '{latest_query}'")
+        log_status("Intent matched: [LLM] (General reasoning)")
         system_prompt = (
             "You are a helpful general-purpose AI assistant. Answer the user's question "
             "freely and accurately using your training knowledge base."
@@ -221,12 +199,15 @@ def adaptive_router_node(state: State):
         badge = "[LLM]"
 
     messages_with_context = [{"role": "system", "content": system_prompt}] + state["messages"]
+    log_status(f"Generating response in {badge} mode...")
     response = llm.invoke(messages_with_context)
     response.content = f"{badge} {response.content}"
+    log_status("Response generated successfully.")
     
     return {"messages": [response]}
 
 def output_guardrail_node(state: State):
+    log_status("Checking output response against PII guardrails...")
     last_msg = state["messages"][-1]
     if hasattr(last_msg, "content"):
         content_str = last_msg.content
@@ -236,10 +217,8 @@ def output_guardrail_node(state: State):
                 badge = prefix
                 content_str = content_str[len(prefix):].strip()
                 break
-        
         sanitized_content = sanitize_text(content_str)
         last_msg.content = f"{badge} {sanitized_content}".strip()
-        
     return {"messages": state["messages"]}
 
 workflow = StateGraph(State)

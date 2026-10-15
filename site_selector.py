@@ -3,6 +3,7 @@ from typing import TypedDict, List, Dict, Any
 from langchain_ollama import ChatOllama
 from langchain_community.utilities import GoogleSerperAPIWrapper
 from langgraph.graph import StateGraph, START, END
+from logger import log_status
 
 llm = ChatOllama(model="llama3.2", temperature=0.1, base_url="http://localhost:11434")
 
@@ -18,14 +19,12 @@ def supervisor_agent_node(state: SiteSelectionState):
     country = state["country"]
     locations = state["locations"]
     
-    # Initialize Serper inside the node so environment variables are fully loaded
+    log_status(f"🌐 Initiating multi-agent analysis for {country} across: {', '.join(locations)}")
+    
     serper = GoogleSerperAPIWrapper()
-    
-    print(f"\n[SUPERVISOR] Initiating multi-agent site selection analysis for {country} across locations: {locations}")
-    
     raw_data = {}
     for loc in locations:
-        print(f"\n[SUPERVISOR -> WORKERS] Delegating research tasks for location: {loc}")
+        log_status(f"🔍 Delegating workers for location: {loc} (Zoning, Power, Financials)...")
         
         zoning_res = serper.run(f"commercial real estate zoning environmental regulations data center {loc} {country}")
         power_res = serper.run(f"power grid capacity electricity substation renewable energy data center {loc} {country}")
@@ -44,7 +43,7 @@ def evaluation_subgraph_node(state: SiteSelectionState):
     evaluations = {}
     
     for loc, data in raw_data.items():
-        print(f"[EVALUATION AGENT] Analyzing and synthesizing data for {loc}...")
+        log_status(f"📊 Analyzing & scoring infrastructure metrics for {loc}...")
         prompt = f"""
         You are an expert Commercial Real Estate and Data Center Infrastructure Analyst.
         Analyze the following raw data for location: {loc} in {state['country']}.
@@ -75,7 +74,7 @@ def synthesis_and_report_node(state: SiteSelectionState):
     locations = state["locations"]
     evaluations = state["evaluations"]
     
-    print(f"[SUPERVISOR] Synthesizing cross-domain evaluations and generating comparison metrics...")
+    log_status(f"📝 Synthesizing cross-domain evaluations & drafting Investment Memo...")
     eval_text = "\n\n".join([f"=== LOCATION: {loc} ===\n{eval}" for loc, eval in evaluations.items()])
     
     synthesis_prompt = f"""
@@ -96,21 +95,22 @@ def synthesis_and_report_node(state: SiteSelectionState):
     reports_dir = r"E:\Products\mango-lassy-chat\reports"
     os.makedirs(reports_dir, exist_ok=True)
     
-    filename_slug = "_vs_".join([loc.lower().replace(" ", "_") for loc in locations])
-    filename = f"site_selection_{country.lower()}_{filename_slug}.md"
+    # Sanitize country and location names to prevent path/directory traversal issues (e.g. slashes)
+    safe_country = country.lower().replace("/", "_").replace("\\", "_").replace(" ", "_")
+    filename_slug = "_vs_".join([loc.lower().replace("/", "_").replace("\\", "_").replace(" ", "_") for loc in locations])
+    filename = f"site_selection_{safe_country}_{filename_slug}.md"
     filepath = os.path.join(reports_dir, filename)
     
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(report_content)
         
-    print(f"[REPORT SAVED] Successfully generated and saved report to: {filepath}")
+    log_status(f"💾 Report saved successfully to: {filepath}")
     
     return {
         "comparison_report": report_content,
         "report_filepath": filepath
     }
 
-# Build Site Selection Workflow
 site_workflow = StateGraph(SiteSelectionState)
 site_workflow.add_node("supervisor", supervisor_agent_node)
 site_workflow.add_node("evaluator", evaluation_subgraph_node)
