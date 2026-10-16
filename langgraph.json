@@ -1,0 +1,7 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "mango_lassi_agent": "./agent_graph.py:app_graph"
+  },
+  "env": ".env"
+}

@@ -11,3 +11,4 @@ presidio-analyzer
 presidio-anonymizer
 google-search-results
 python-dotenv
+langgraph-cli[inmem]
